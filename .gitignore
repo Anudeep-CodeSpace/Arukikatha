@@ -1,0 +1,26 @@
+# Gradle and Android build output
+.gradle/
+build/
+app/build/
+
+# Local Android Studio and machine-specific config
+local.properties
+.idea/
+*.iml
+.kotlin/
+
+# Signing material and release secrets
+*.jks
+*.keystore
+keystore.properties
+signing.properties
+release/
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# Logs
+*.log
