@@ -82,7 +82,7 @@ class SessionNotificationHelper(private val context: Context) {
         return NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_media_play)
             .setContentTitle("$phaseLabel • $timeStr")
-            .setContentText("Cycle $cycle • ${state.successfulMinutes}/30 min successful")
+            .setContentText("Round $cycle • ${state.successfulMinutes}/30 min successful")
             .setContentIntent(openIntent)
             .setOnlyAlertOnce(true)
             .setOngoing(true)

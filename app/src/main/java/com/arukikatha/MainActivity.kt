@@ -28,6 +28,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -247,52 +248,61 @@ private fun WorkoutScreen(
             .fillMaxSize()
             .background(colors.backgroundBrush)
             .safeDrawingPadding()
-            .padding(horizontal = 24.dp, vertical = 30.dp),
+            .padding(horizontal = 24.dp, vertical = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
+        // Header stays at the top
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.Start,
             verticalAlignment = Alignment.CenterVertically
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                ArukikathaLogo(modifier = Modifier.size(38.dp))
+                ArukikathaLogo(modifier = Modifier.size(42.dp))
                 Column {
-                    Text("Arukikatha", color = colors.text, fontSize = 19.sp, fontWeight = FontWeight.ExtraBold)
-                    Text(modeLabel(state.phase), color = modeColor, fontSize = 15.sp, fontWeight = FontWeight.Bold)
+                    Text("Arukikatha", color = colors.text, fontSize = 21.sp, fontWeight = FontWeight.ExtraBold)
+                    Text(modeLabel(state.phase), color = modeColor, fontSize = 16.sp, fontWeight = FontWeight.Bold)
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(34.dp))
+        // Center content area that expands to fill space
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            TimerDial(
+                state = state,
+                textColor = colors.text,
+                subTextColor = colors.subText,
+                surfaceColor = colors.surface,
+                modeColor = modeColor,
+                phaseProgress = phaseProgress,
+                timerScale = timerScale,
+                startPauseIcon = startPauseIcon,
+                stopEnabled = state.isRunning,
+                startPauseEnabled = state.phase != ArukikathaPhase.COMPLETED || !state.isRunning,
+                onStartPause = startPauseAction,
+                onStop = onStop
+            )
 
-        TimerDial(
-            state = state,
-            textColor = colors.text,
-            subTextColor = colors.subText,
-            surfaceColor = colors.surface,
-            modeColor = modeColor,
-            phaseProgress = phaseProgress,
-            timerScale = timerScale,
-            startPauseIcon = startPauseIcon,
-            stopEnabled = state.isRunning,
-            startPauseEnabled = state.phase != ArukikathaPhase.COMPLETED || !state.isRunning,
-            onStartPause = startPauseAction,
-            onStop = onStop
-        )
+            Spacer(modifier = Modifier.height(48.dp))
 
-        Spacer(modifier = Modifier.height(32.dp))
-
-        ProgressStatus(
-            state = state,
-            goalProgress = animatedGoalProgress,
-            textColor = colors.text,
-            subTextColor = colors.subText,
-            surfaceColor = colors.surface,
-            accentColor = Color(0xFF4FC3F7)
-        )
-
-        Spacer(modifier = Modifier.weight(1f))
+            ProgressStatus(
+                state = state,
+                goalProgress = animatedGoalProgress,
+                textColor = colors.text,
+                subTextColor = colors.subText,
+                surfaceColor = colors.surface,
+                accentColor = Color(0xFF4FC3F7)
+            )
+        }
+        
+        // Ensure some padding at the bottom for safety
+        Spacer(modifier = Modifier.height(24.dp))
     }
 }
 
@@ -314,88 +324,96 @@ private fun TimerDial(
     Box(
         contentAlignment = Alignment.Center,
         modifier = Modifier
-            .size(318.dp)
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp)
             .graphicsLayer {
                 scaleX = timerScale
                 scaleY = timerScale
             }
     ) {
-        val density = LocalDensity.current
-        val strokeWidthPx = with(density) { 9.dp.toPx() }
-
-        Canvas(modifier = Modifier.size(288.dp)) {
-            drawCircle(color = surfaceColor, style = Stroke(width = strokeWidthPx))
-            drawCircle(
-                brush = Brush.radialGradient(
-                    colors = listOf(modeColor.copy(alpha = 0.20f), Color.Transparent),
-                    center = center,
-                    radius = size.minDimension * 0.46f
-                ),
-                radius = size.minDimension * 0.42f
-            )
-            drawArc(
-                color = modeColor,
-                startAngle = -90f,
-                sweepAngle = phaseProgress * 360f,
-                useCenter = false,
-                style = Stroke(width = strokeWidthPx, cap = StrokeCap.Round)
-            )
-        }
-
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+        // This Box provides a proportional aspect ratio so the timer scales with width
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(1f),
+            contentAlignment = Alignment.Center
         ) {
-            Text(
-                text = if (state.isPaused) "PAUSED" else "REMAINING",
-                color = subTextColor,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.SemiBold
-            )
-            Text(
-                text = formatTimerText(state.phaseRemainingMs),
-                color = textColor,
-                fontSize = 52.sp,
-                fontWeight = FontWeight.Light
-            )
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(18.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.padding(top = 4.dp)
+            Canvas(modifier = Modifier.fillMaxSize(0.95f)) {
+                val strokeWidthPx = 10.dp.toPx()
+                drawCircle(color = surfaceColor, style = Stroke(width = strokeWidthPx))
+                drawCircle(
+                    brush = Brush.radialGradient(
+                        colors = listOf(modeColor.copy(alpha = 0.20f), Color.Transparent),
+                        center = center,
+                        radius = size.minDimension * 0.46f
+                    ),
+                    radius = size.minDimension * 0.42f
+                )
+                drawArc(
+                    color = modeColor,
+                    startAngle = -90f,
+                    sweepAngle = phaseProgress * 360f,
+                    useCenter = false,
+                    style = Stroke(width = strokeWidthPx, cap = StrokeCap.Round)
+                )
+            }
+
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                FilledIconButton(
-                    onClick = onStartPause,
-                    enabled = startPauseEnabled,
-                    modifier = Modifier.size(58.dp),
-                    shape = CircleShape,
-                    colors = IconButtonDefaults.filledIconButtonColors(
-                        containerColor = modeColor,
-                        contentColor = Color.White
-                    )
+                Text(
+                    text = if (state.isPaused) "PAUSED" else "REMAINING",
+                    color = subTextColor,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    letterSpacing = 1.sp
+                )
+                Text(
+                    text = formatTimerText(state.phaseRemainingMs),
+                    color = textColor,
+                    fontSize = 64.sp,
+                    fontWeight = FontWeight.Light
+                )
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(20.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(top = 8.dp)
                 ) {
-                    Icon(
-                        imageVector = startPauseIcon,
-                        contentDescription = "Start or pause",
-                        modifier = Modifier.size(28.dp)
-                    )
-                }
-                FilledTonalIconButton(
-                    onClick = onStop,
-                    enabled = stopEnabled,
-                    modifier = Modifier.size(50.dp),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = IconButtonDefaults.filledTonalIconButtonColors(
-                        containerColor = surfaceColor,
-                        contentColor = textColor,
-                        disabledContainerColor = surfaceColor.copy(alpha = 0.52f),
-                        disabledContentColor = subTextColor.copy(alpha = 0.55f)
-                    )
-                ) {
-                    Icon(
-                        imageVector = Icons.Filled.Stop,
-                        contentDescription = "Stop",
-                        modifier = Modifier.size(24.dp)
-                    )
+                    FilledIconButton(
+                        onClick = onStartPause,
+                        enabled = startPauseEnabled,
+                        modifier = Modifier.size(64.dp),
+                        shape = CircleShape,
+                        colors = IconButtonDefaults.filledIconButtonColors(
+                            containerColor = modeColor,
+                            contentColor = Color.White
+                        )
+                    ) {
+                        Icon(
+                            imageVector = startPauseIcon,
+                            contentDescription = "Start or pause",
+                            modifier = Modifier.size(32.dp)
+                        )
+                    }
+                    FilledTonalIconButton(
+                        onClick = onStop,
+                        enabled = stopEnabled,
+                        modifier = Modifier.size(56.dp),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = IconButtonDefaults.filledTonalIconButtonColors(
+                            containerColor = surfaceColor,
+                            contentColor = textColor,
+                            disabledContainerColor = surfaceColor.copy(alpha = 0.52f),
+                            disabledContentColor = subTextColor.copy(alpha = 0.55f)
+                        )
+                    ) {
+                        Icon(
+                            imageVector = Icons.Filled.Stop,
+                            contentDescription = "Stop",
+                            modifier = Modifier.size(28.dp)
+                        )
+                    }
                 }
             }
         }

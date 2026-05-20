@@ -10,7 +10,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
 class ArukikathaSessionService : Service() {
@@ -21,7 +20,7 @@ class ArukikathaSessionService : Service() {
     private lateinit var notificationHelper: SessionNotificationHelper
     private lateinit var cueManager: CueManager
 
-    private var previousPhase: ArukikathaPhase = ArukikathaPhase.BRISK
+    private var previousPhase: ArukikathaPhase? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -37,10 +36,16 @@ class ArukikathaSessionService : Service() {
             "com.arukikatha.INIT" -> {
                 // Just starts the service to show notification
             }
-            ACTION_START -> SessionOrchestrator.start()
+            ACTION_START -> {
+                previousPhase = null
+                SessionOrchestrator.start()
+            }
             ACTION_PAUSE -> SessionOrchestrator.pause()
             ACTION_RESUME -> SessionOrchestrator.resume()
-            ACTION_STOP -> SessionOrchestrator.stop()
+            ACTION_STOP -> {
+                previousPhase = null
+                SessionOrchestrator.stop()
+            }
         }
         return START_STICKY
     }
@@ -48,10 +53,10 @@ class ArukikathaSessionService : Service() {
     private fun observeSessionState() {
         observerJob?.cancel()
         observerJob = serviceScope.launch {
-            SessionOrchestrator.state.collectLatest { state ->
+            SessionOrchestrator.state.collect { state ->
                 startForeground(SessionNotificationHelper.NOTIFICATION_ID, notificationHelper.build(state))
 
-                if (state.phase != previousPhase) {
+                if (state.isRunning && state.phase != previousPhase) {
                     when (state.phase) {
                         ArukikathaPhase.BRISK -> {
                             cueManager.playBriskCue()
@@ -63,14 +68,20 @@ class ArukikathaSessionService : Service() {
                             cueManager.vibrateShort()
                         }
 
+                        ArukikathaPhase.PAUSE_TO_NORMAL,
+                        ArukikathaPhase.PAUSE_TO_BRISK -> {
+                            cueManager.playResetCue()
+                            cueManager.vibrateShort()
+                        }
+
                         ArukikathaPhase.COMPLETED -> {
                             cueManager.playCompletionCue()
                             cueManager.vibrateShort()
                         }
-
-                        else -> Unit
                     }
                     previousPhase = state.phase
+                } else if (!state.isRunning) {
+                    previousPhase = null
                 }
             }
         }
