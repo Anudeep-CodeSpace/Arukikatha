@@ -11,12 +11,19 @@ import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
@@ -53,6 +60,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -65,7 +73,6 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -91,63 +98,71 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             MaterialTheme {
-                Surface(modifier = Modifier.fillMaxSize()) {
-                    val state by viewModel.sessionState.collectAsStateWithLifecycle()
-                    val isDarkMode = isSystemInDarkTheme()
-                    var showLanding by rememberSaveable { mutableStateOf(true) }
+                val isDarkMode = isSystemInDarkTheme()
+                val colors = appColors(isDarkMode)
 
-                    val context = LocalContext.current
-                    val launcher = rememberLauncherForActivityResult(
-                        ActivityResultContracts.RequestPermission()
-                    ) { isGranted ->
-                        if (isGranted) viewModel.start()
-                    }
+                Surface(modifier = Modifier.fillMaxSize(), color = Color.Transparent) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(colors.backgroundBrush)
+                    ) {
+                        val state by viewModel.sessionState.collectAsStateWithLifecycle()
+                        var showLanding by rememberSaveable { mutableStateOf(true) }
 
-                    LaunchedEffect(Unit) {
-                        delay(1200)
-                        showLanding = false
-                    }
-
-                    val startSession = {
-                        showLanding = false
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                            if (ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) {
-                                viewModel.start()
-                            } else {
-                                launcher.launch(Manifest.permission.POST_NOTIFICATIONS)
-                            }
-                        } else {
-                            viewModel.start()
+                        val context = LocalContext.current
+                        val launcher = rememberLauncherForActivityResult(
+                            ActivityResultContracts.RequestPermission()
+                        ) { isGranted ->
+                            if (isGranted) viewModel.start()
                         }
-                    }
-                    val stopSession = {
-                        viewModel.stop()
-                    }
 
-                    AnimatedContent(
-                        targetState = showLanding,
-                        transitionSpec = {
-                            if (!targetState) {
-                                // Slide and fade for a "push" effect to the workout screen
-                                (slideInHorizontally { width -> width } + fadeIn(animationSpec = tween(500)))
-                                    .togetherWith(slideOutHorizontally { width -> -width } + fadeOut(animationSpec = tween(500)))
+                        LaunchedEffect(Unit) {
+                            delay(600)
+                            showLanding = false
+                        }
+
+                        val startSession = {
+                            showLanding = false
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                if (ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) {
+                                    viewModel.start()
+                                } else {
+                                    launcher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                }
                             } else {
-                                fadeIn(animationSpec = tween(500)) togetherWith fadeOut(animationSpec = tween(500))
-                            }.using(SizeTransform(clip = false))
-                        },
-                        label = "landingToWorkoutTransition"
-                    ) { landingVisible ->
-                        if (landingVisible) {
-                            LandingScreen(isDarkMode = isDarkMode)
-                        } else {
-                            WorkoutScreen(
-                                state = state,
-                                isDarkMode = isDarkMode,
-                                onStart = startSession,
-                                onPause = viewModel::pause,
-                                onResume = viewModel::resume,
-                                onStop = stopSession
-                            )
+                                viewModel.start()
+                            }
+                        }
+                        val stopSession = {
+                            viewModel.stop()
+                        }
+
+                        AnimatedContent(
+                            targetState = showLanding,
+                            modifier = Modifier.fillMaxSize(),
+                            transitionSpec = {
+                                if (!targetState) {
+                                    (slideInHorizontally { width -> width } + fadeIn(animationSpec = tween(500)))
+                                        .togetherWith(slideOutHorizontally { width -> -width } + fadeOut(animationSpec = tween(500)))
+                                } else {
+                                    fadeIn(animationSpec = tween(500)) togetherWith fadeOut(animationSpec = tween(500))
+                                }.using(SizeTransform(clip = false))
+                            },
+                            label = "landingToWorkoutTransition"
+                        ) { landingVisible ->
+                            if (landingVisible) {
+                                LandingScreen(isDarkMode = isDarkMode)
+                            } else {
+                                WorkoutScreen(
+                                    state = state,
+                                    isDarkMode = isDarkMode,
+                                    onStart = startSession,
+                                    onPause = viewModel::pause,
+                                    onResume = viewModel::resume,
+                                    onStop = stopSession
+                                )
+                            }
                         }
                     }
                 }
@@ -210,7 +225,7 @@ private fun WorkoutScreen(
     val colors = appColors(isDarkMode)
     val modeColor by animateColorAsState(
         targetValue = modeColor(state.phase),
-        animationSpec = tween(durationMillis = 900),
+        animationSpec = tween(durationMillis = 400),
         label = "modeColor"
     )
 
@@ -219,11 +234,27 @@ private fun WorkoutScreen(
     } else {
         (1f - (state.phaseRemainingMs / state.currentPhaseDurationMs.toFloat())).coerceIn(0f, 1f)
     }
-    val phaseProgress by animateFloatAsState(
-        targetValue = rawPhaseProgress,
-        animationSpec = tween(durationMillis = 800),
-        label = "phaseProgress"
-    )
+    val phaseProgress = remember { Animatable(rawPhaseProgress) }
+    var lastPhase by remember { mutableStateOf(state.phase) }
+
+    LaunchedEffect(state.phase, rawPhaseProgress) {
+        if (state.phase != lastPhase) {
+            if (phaseProgress.value > 0.1f) {
+                phaseProgress.animateTo(1f, animationSpec = tween(durationMillis = 350))
+            }
+            phaseProgress.snapTo(0f)
+            lastPhase = state.phase
+        }
+
+        if (rawPhaseProgress < phaseProgress.value - 0.05f) {
+            phaseProgress.snapTo(rawPhaseProgress)
+        }
+
+        phaseProgress.animateTo(
+            targetValue = rawPhaseProgress,
+            animationSpec = tween(durationMillis = 150)
+        )
+    }
     val animatedGoalProgress by animateFloatAsState(
         targetValue = (state.successfulMinutes / 30f).coerceIn(0f, 1f),
         animationSpec = tween(durationMillis = 500),
@@ -231,7 +262,7 @@ private fun WorkoutScreen(
     )
     val timerScale by animateFloatAsState(
         targetValue = if (state.isRunning && !state.isPaused) 1.015f else 1f,
-        animationSpec = tween(durationMillis = 900),
+        animationSpec = tween(durationMillis = 400),
         label = "timerScale"
     )
     val startPauseIcon = if (state.isRunning && !state.isPaused) Icons.Filled.Pause else Icons.Filled.PlayArrow
@@ -251,58 +282,131 @@ private fun WorkoutScreen(
             .padding(horizontal = 24.dp, vertical = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // Header stays at the top
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.Start,
-            verticalAlignment = Alignment.CenterVertically
+        if (state.phase == ArukikathaPhase.COMPLETED) {
+            CelebrationScreen(colors = colors, onDone = onStop)
+        } else {
+            // Header stays at the top
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Start,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    ArukikathaLogo(modifier = Modifier.size(42.dp))
+                    Column {
+                        Text("Arukikatha", color = colors.text, fontSize = 21.sp, fontWeight = FontWeight.ExtraBold)
+                        Text(modeLabel(state.phase), color = modeColor, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+
+            // Center content area that expands to fill space
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                TimerDial(
+                    state = state,
+                    textColor = colors.text,
+                    subTextColor = colors.subText,
+                    surfaceColor = colors.surface,
+                    modeColor = modeColor,
+                    phaseProgress = phaseProgress.value,
+                    timerScale = timerScale,
+                    startPauseIcon = startPauseIcon,
+                    stopEnabled = state.isRunning,
+                    startPauseEnabled = state.phase != ArukikathaPhase.COMPLETED || !state.isRunning,
+                    onStartPause = startPauseAction,
+                    onStop = onStop
+                )
+
+                Spacer(modifier = Modifier.height(76.dp))
+
+                ProgressStatus(
+                    state = state,
+                    goalProgress = animatedGoalProgress,
+                    textColor = colors.text,
+                    subTextColor = colors.subText,
+                    surfaceColor = colors.surface,
+                    accentColor = Color(0xFF4FC3F7)
+                )
+            }
+
+            // Ensure some padding at the bottom for safety
+            Spacer(modifier = Modifier.height(24.dp))
+        }
+    }
+}
+
+@Composable
+private fun CelebrationScreen(
+    colors: AppColors,
+    onDone: () -> Unit
+) {
+    val infiniteTransition = rememberInfiniteTransition(label = "celebrationPulse")
+    val scale by infiniteTransition.animateFloat(
+        initialValue = 0.95f,
+        targetValue = 1.05f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1000),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "logoScale"
+    )
+
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        AnimatedVisibility(
+            visible = true,
+            enter = fadeIn(tween(1000)) + scaleIn(tween(1000))
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                ArukikathaLogo(modifier = Modifier.size(42.dp))
-                Column {
-                    Text("Arukikatha", color = colors.text, fontSize = 21.sp, fontWeight = FontWeight.ExtraBold)
-                    Text(modeLabel(state.phase), color = modeColor, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Box(modifier = Modifier.graphicsLayer {
+                    scaleX = scale
+                    scaleY = scale
+                }) {
+                    ArukikathaLogo(modifier = Modifier.size(180.dp))
+                }
+
+                Spacer(modifier = Modifier.height(40.dp))
+
+                Text(
+                    text = "Congratulations!",
+                    color = colors.text,
+                    fontSize = 32.sp,
+                    fontWeight = FontWeight.Bold
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                Text(
+                    text = "You've completed your routine.",
+                    color = colors.subText,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Medium
+                )
+
+                Spacer(modifier = Modifier.height(48.dp))
+
+                FilledTonalIconButton(
+                    onClick = onDone,
+                    modifier = Modifier.size(80.dp),
+                    shape = CircleShape,
+                    colors = IconButtonDefaults.filledTonalIconButtonColors(
+                        containerColor = Color(0xFF43A047),
+                        contentColor = Color.White
+                    )
+                ) {
+                    Text("DONE", fontWeight = FontWeight.Bold)
                 }
             }
         }
-
-        // Center content area that expands to fill space
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
-        ) {
-            TimerDial(
-                state = state,
-                textColor = colors.text,
-                subTextColor = colors.subText,
-                surfaceColor = colors.surface,
-                modeColor = modeColor,
-                phaseProgress = phaseProgress,
-                timerScale = timerScale,
-                startPauseIcon = startPauseIcon,
-                stopEnabled = state.isRunning,
-                startPauseEnabled = state.phase != ArukikathaPhase.COMPLETED || !state.isRunning,
-                onStartPause = startPauseAction,
-                onStop = onStop
-            )
-
-            Spacer(modifier = Modifier.height(48.dp))
-
-            ProgressStatus(
-                state = state,
-                goalProgress = animatedGoalProgress,
-                textColor = colors.text,
-                subTextColor = colors.subText,
-                surfaceColor = colors.surface,
-                accentColor = Color(0xFF4FC3F7)
-            )
-        }
-        
-        // Ensure some padding at the bottom for safety
-        Spacer(modifier = Modifier.height(24.dp))
     }
 }
 
@@ -551,7 +655,7 @@ private fun modeLabel(phase: ArukikathaPhase): String {
 }
 
 private fun sessionHint(state: ActiveSessionState): String {
-    val roundIndex = state.completedNormalCount + 1
+    val roundIndex = state.completedBriskCount + state.completedNormalCount + 1
     return when {
         state.phase == ArukikathaPhase.COMPLETED -> "Goal complete"
         state.isPaused -> "Round $roundIndex paused"

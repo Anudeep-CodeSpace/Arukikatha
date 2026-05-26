@@ -17,7 +17,7 @@ import kotlinx.coroutines.launch
 
 object SessionOrchestrator {
     private const val TICK_MS = 100L
-    private const val RESET_ANIMATION_HOLD_MS = 800L
+    private const val RESET_ANIMATION_HOLD_MS = 600L
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val engine = ArukikathaSessionEngine()

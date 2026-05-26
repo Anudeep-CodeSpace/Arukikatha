@@ -6,7 +6,6 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.os.Build
 import androidx.core.app.NotificationCompat
 import com.arukikatha.MainActivity
 import com.arukikatha.domain.ActiveSessionState
@@ -17,14 +16,12 @@ class SessionNotificationHelper(private val context: Context) {
     private val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
     fun createChannel() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                CHANNEL_ID,
-                "Arukikatha Session",
-                NotificationManager.IMPORTANCE_LOW
-            )
-            manager.createNotificationChannel(channel)
-        }
+        val channel = NotificationChannel(
+            CHANNEL_ID,
+            "Arukikatha Session",
+            NotificationManager.IMPORTANCE_LOW
+        )
+        manager.createNotificationChannel(channel)
     }
 
     fun build(state: ActiveSessionState): Notification {
@@ -77,19 +74,17 @@ class SessionNotificationHelper(private val context: Context) {
             ArukikathaPhase.PAUSE_TO_NORMAL, ArukikathaPhase.PAUSE_TO_BRISK -> "Breathing"
             ArukikathaPhase.COMPLETED -> "Finished"
         }
-        val cycle = state.completedBriskCount + state.completedNormalCount + 1
+        val round = state.completedBriskCount + state.completedNormalCount + 1
         
         return NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_media_play)
             .setContentTitle("$phaseLabel • $timeStr")
-            .setContentText("Round $cycle • ${state.successfulMinutes}/30 min successful")
+            .setContentText("Round $round • ${state.successfulMinutes}/30 min successful")
             .setContentIntent(openIntent)
             .setOnlyAlertOnce(true)
             .setOngoing(true)
             .addAction(pauseResumeAction)
             .addAction(stopAction)
-            .setStyle(androidx.media.app.NotificationCompat.MediaStyle()
-                .setShowActionsInCompactView(0, 1))
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .build()
     }

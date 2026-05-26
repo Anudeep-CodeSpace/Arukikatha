@@ -2,7 +2,6 @@ package com.arukikatha.ui
 
 import android.app.Application
 import android.content.Intent
-import android.os.Build
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.room.Room
@@ -65,10 +64,6 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private fun sendServiceAction(action: String) {
         val app = getApplication<Application>()
         val intent = Intent(app, ArukikathaSessionService::class.java).apply { this.action = action }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            app.startForegroundService(intent)
-        } else {
-            app.startService(intent)
-        }
+        app.startForegroundService(intent)
     }
 }
