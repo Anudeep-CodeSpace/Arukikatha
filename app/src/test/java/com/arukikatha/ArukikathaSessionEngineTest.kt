@@ -5,6 +5,7 @@ import com.arukikatha.domain.ArukikathaSessionEngine
 import com.arukikatha.domain.SessionConfig
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -13,7 +14,7 @@ class ArukikathaSessionEngineTest {
     @Test
     fun pauseNineSeconds_resumesWithoutReset() {
         val engine = ArukikathaSessionEngine(SessionConfig(briskSeconds = 20, normalSeconds = 20, pauseSeconds = 5, targetSuccessfulMinutes = 30))
-        engine.start()
+        engine.start(startedAtEpochMillis = 1_000L)
         repeat(5) { engine.tick() }
 
         val beforePauseRemaining = engine.state().phaseRemainingSec
@@ -29,7 +30,7 @@ class ArukikathaSessionEngineTest {
     @Test
     fun pauseElevenSeconds_resetsCurrentMode() {
         val engine = ArukikathaSessionEngine(SessionConfig(briskSeconds = 20, normalSeconds = 20, pauseSeconds = 5, targetSuccessfulMinutes = 30))
-        engine.start()
+        engine.start(startedAtEpochMillis = 1_000L)
         repeat(7) { engine.tick() }
 
         val elapsedAtPause = engine.state().totalElapsedSec
@@ -46,7 +47,7 @@ class ArukikathaSessionEngineTest {
         val engine = ArukikathaSessionEngine(
             SessionConfig(briskSeconds = 3, normalSeconds = 4, pauseSeconds = 2, targetSuccessfulMinutes = 30)
         )
-        engine.start()
+        engine.start(startedAtEpochMillis = 1_000L)
 
         assertEquals(3_000, engine.state().currentPhaseDurationMs)
 
@@ -66,7 +67,7 @@ class ArukikathaSessionEngineTest {
     @Test
     fun successfulMinutes_onlyIncreaseOnCompletedWorkModes() {
         val engine = ArukikathaSessionEngine(SessionConfig(briskSeconds = 2, normalSeconds = 2, pauseSeconds = 1, targetSuccessfulMinutes = 30))
-        engine.start()
+        engine.start(startedAtEpochMillis = 1_000L)
 
         engine.tick()
         assertEquals(0, engine.state().successfulMinutes)
@@ -83,7 +84,7 @@ class ArukikathaSessionEngineTest {
     @Test
     fun reachesThirtySuccessfulMinutes_afterTenWorkModes() {
         val engine = ArukikathaSessionEngine(SessionConfig(briskSeconds = 1, normalSeconds = 1, pauseSeconds = 1, targetSuccessfulMinutes = 30))
-        engine.start()
+        engine.start(startedAtEpochMillis = 1_000L)
 
         while (engine.state().phase != ArukikathaPhase.COMPLETED) {
             engine.tick()
@@ -92,5 +93,21 @@ class ArukikathaSessionEngineTest {
         assertEquals(30, engine.state().successfulMinutes)
         assertFalse(engine.state().isRunning)
         assertTrue(engine.state().completedBriskCount + engine.state().completedNormalCount >= 10)
+    }
+
+    @Test
+    fun startTime_resetsAfterStopAndRestart() {
+        val engine = ArukikathaSessionEngine()
+
+        assertNull(engine.state().startedAtEpochMillis)
+
+        engine.start(startedAtEpochMillis = 1_000L)
+        assertEquals(1_000L, engine.state().startedAtEpochMillis)
+
+        engine.stop()
+        assertNull(engine.state().startedAtEpochMillis)
+
+        engine.start(startedAtEpochMillis = 2_000L)
+        assertEquals(2_000L, engine.state().startedAtEpochMillis)
     }
 }

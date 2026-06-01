@@ -31,7 +31,8 @@ data class ActiveSessionState(
     val totalPauses: Int = 0,
     val lastResetMessage: String? = null,
     val resetMessageRemainingMs: Int = 0,
-    val totalElapsedSec: Int = 0
+    val totalElapsedSec: Int = 0,
+    val startedAtEpochMillis: Long? = null
 )
 
 object ProgressCalculator {

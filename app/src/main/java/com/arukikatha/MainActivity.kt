@@ -30,6 +30,8 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -85,6 +87,10 @@ import com.arukikatha.domain.ActiveSessionState
 import com.arukikatha.domain.ArukikathaPhase
 import com.arukikatha.ui.MainViewModel
 import kotlinx.coroutines.delay
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import kotlin.math.abs
 
 class MainActivity : ComponentActivity() {
     private val viewModel by viewModels<MainViewModel>()
@@ -230,23 +236,26 @@ private fun WorkoutScreen(
     )
 
     val rawPhaseProgress = if (state.currentPhaseDurationMs <= 0) {
-        1f
+        0f
     } else {
-        (1f - (state.phaseRemainingMs / state.currentPhaseDurationMs.toFloat())).coerceIn(0f, 1f)
+        (1f - (state.phaseRemainingMs.toFloat() / state.currentPhaseDurationMs.toFloat())).coerceIn(0f, 1f)
     }
     val phaseProgress = remember { Animatable(rawPhaseProgress) }
     var lastPhase by remember { mutableStateOf(state.phase) }
 
     LaunchedEffect(state.phase, rawPhaseProgress) {
         if (state.phase != lastPhase) {
-            if (phaseProgress.value > 0.1f) {
+            // Only animate the wrap-up if we were already watching the previous phase end
+            // and the jump isn't massive (which happens when returning from background)
+            if (phaseProgress.value > 0.8f && rawPhaseProgress < 0.2f) {
                 phaseProgress.animateTo(1f, animationSpec = tween(durationMillis = 350))
             }
             phaseProgress.snapTo(0f)
             lastPhase = state.phase
         }
-
-        if (rawPhaseProgress < phaseProgress.value - 0.05f) {
+        
+        // If we just resumed and the animatable is far from the actual state, snap it
+        if (abs(phaseProgress.value - rawPhaseProgress) > 0.15f) {
             phaseProgress.snapTo(rawPhaseProgress)
         }
 
@@ -283,7 +292,7 @@ private fun WorkoutScreen(
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         if (state.phase == ArukikathaPhase.COMPLETED) {
-            CelebrationScreen(colors = colors, onDone = onStop)
+            CelebrationScreen(state = state, colors = colors, onDone = onStop)
         } else {
             // Header stays at the top
             Row(
@@ -296,6 +305,14 @@ private fun WorkoutScreen(
                     Column {
                         Text("Arukikatha", color = colors.text, fontSize = 21.sp, fontWeight = FontWeight.ExtraBold)
                         Text(modeLabel(state.phase), color = modeColor, fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                        Text(
+                            text = state.startedAtEpochMillis?.let { startedAt ->
+                                "Started ${formatStartTime(startedAt)}"
+                            }.orEmpty(),
+                            color = colors.subText,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold
+                        )
                     }
                 }
             }
@@ -318,7 +335,7 @@ private fun WorkoutScreen(
                     timerScale = timerScale,
                     startPauseIcon = startPauseIcon,
                     stopEnabled = state.isRunning,
-                    startPauseEnabled = state.phase != ArukikathaPhase.COMPLETED || !state.isRunning,
+                    startPauseEnabled = true,
                     onStartPause = startPauseAction,
                     onStop = onStop
                 )
@@ -343,6 +360,7 @@ private fun WorkoutScreen(
 
 @Composable
 private fun CelebrationScreen(
+    state: ActiveSessionState,
     colors: AppColors,
     onDone: () -> Unit
 ) {
@@ -357,56 +375,177 @@ private fun CelebrationScreen(
         label = "logoScale"
     )
 
+    val totalRounds = state.completedBriskCount + state.completedNormalCount
+
     Column(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 4.dp)
+            .verticalScroll(rememberScrollState()),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+        verticalArrangement = Arrangement.Top
     ) {
+        Spacer(modifier = Modifier.height(16.dp))
+
         AnimatedVisibility(
             visible = true,
             enter = fadeIn(tween(1000)) + scaleIn(tween(1000))
         ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Box(modifier = Modifier.graphicsLayer {
-                    scaleX = scale
-                    scaleY = scale
-                }) {
-                    ArukikathaLogo(modifier = Modifier.size(180.dp))
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(24.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(188.dp)
+                        .clip(CircleShape)
+                        .background(
+                            Brush.radialGradient(
+                                colors = listOf(Color(0xFF43A047).copy(alpha = 0.28f), Color.Transparent)
+                            )
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Box(modifier = Modifier.graphicsLayer {
+                        scaleX = scale
+                        scaleY = scale
+                    }) {
+                        ArukikathaLogo(modifier = Modifier.size(138.dp))
+                    }
                 }
 
-                Spacer(modifier = Modifier.height(40.dp))
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        text = "Routine complete",
+                        color = colors.text,
+                        fontSize = 34.sp,
+                        fontWeight = FontWeight.ExtraBold
+                    )
 
-                Text(
-                    text = "Congratulations!",
-                    color = colors.text,
-                    fontSize = 32.sp,
-                    fontWeight = FontWeight.Bold
-                )
+                    Spacer(modifier = Modifier.height(10.dp))
 
-                Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = "You finished the full 30 successful minutes.",
+                        color = colors.subText,
+                        fontSize = 17.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
 
-                Text(
-                    text = "You've completed your routine.",
-                    color = colors.subText,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Medium
-                )
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        CompletionMetric(
+                            label = "Successful",
+                            value = "${state.successfulMinutes} min",
+                            color = Color(0xFF1E88E5),
+                            textColor = colors.text,
+                            subTextColor = colors.subText,
+                            surfaceColor = colors.surface,
+                            modifier = Modifier.weight(1f)
+                        )
+                        CompletionMetric(
+                            label = "Rounds",
+                            value = totalRounds.toString(),
+                            color = Color(0xFF43A047),
+                            textColor = colors.text,
+                            subTextColor = colors.subText,
+                            surfaceColor = colors.surface,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
 
-                Spacer(modifier = Modifier.height(48.dp))
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        CompletionMetric(
+                            label = "Brisk",
+                            value = state.completedBriskCount.toString(),
+                            color = Color(0xFFE53935),
+                            textColor = colors.text,
+                            subTextColor = colors.subText,
+                            surfaceColor = colors.surface,
+                            modifier = Modifier.weight(1f)
+                        )
+                        CompletionMetric(
+                            label = "Normal",
+                            value = state.completedNormalCount.toString(),
+                            color = Color(0xFF43A047),
+                            textColor = colors.text,
+                            subTextColor = colors.subText,
+                            surfaceColor = colors.surface,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
 
                 FilledTonalIconButton(
                     onClick = onDone,
-                    modifier = Modifier.size(80.dp),
+                    modifier = Modifier.size(92.dp),
                     shape = CircleShape,
                     colors = IconButtonDefaults.filledTonalIconButtonColors(
                         containerColor = Color(0xFF43A047),
                         contentColor = Color.White
                     )
                 ) {
-                    Text("DONE", fontWeight = FontWeight.Bold)
+                    Text("DONE", fontSize = 14.sp, fontWeight = FontWeight.ExtraBold)
                 }
             }
         }
+
+        Spacer(modifier = Modifier.height(18.dp))
+
+        Text(
+            text = "Ready for the next walk when you are.",
+            color = colors.subText,
+            fontSize = 14.sp,
+            fontWeight = FontWeight.Medium
+        )
+    }
+}
+
+@Composable
+private fun CompletionMetric(
+    label: String,
+    value: String,
+    color: Color,
+    textColor: Color,
+    subTextColor: Color,
+    surfaceColor: Color,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(18.dp))
+            .background(surfaceColor.copy(alpha = 0.62f))
+            .padding(horizontal = 18.dp, vertical = 16.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(10.dp)
+                .clip(CircleShape)
+                .background(color)
+        )
+        Text(
+            text = value,
+            color = textColor,
+            fontSize = 28.sp,
+            fontWeight = FontWeight.ExtraBold
+        )
+        Text(
+            text = label,
+            color = subTextColor,
+            fontSize = 13.sp,
+            fontWeight = FontWeight.SemiBold
+        )
     }
 }
 
@@ -652,6 +791,10 @@ private fun modeLabel(phase: ArukikathaPhase): String {
         ArukikathaPhase.PAUSE_TO_BRISK -> "Reset breath"
         ArukikathaPhase.COMPLETED -> "Session complete"
     }
+}
+
+private fun formatStartTime(epochMillis: Long): String {
+    return SimpleDateFormat("h:mm a", Locale.getDefault()).format(Date(epochMillis))
 }
 
 private fun sessionHint(state: ActiveSessionState): String {

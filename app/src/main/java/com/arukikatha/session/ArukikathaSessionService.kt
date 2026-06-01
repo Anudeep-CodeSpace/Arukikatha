@@ -3,10 +3,13 @@ package com.arukikatha.session
 import android.app.Service
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ServiceInfo
+import android.os.Build
 import android.os.IBinder
 import android.os.PowerManager
 import android.os.SystemClock
 import android.os.Vibrator
+import android.os.VibratorManager
 import com.arukikatha.domain.ActiveSessionState
 import com.arukikatha.domain.ArukikathaPhase
 import kotlinx.coroutines.CoroutineScope
@@ -33,7 +36,15 @@ class ArukikathaSessionService : Service() {
     override fun onCreate() {
         super.onCreate()
         notificationHelper = SessionNotificationHelper(this)
-        val vibrator = getSystemService(Vibrator::class.java)
+        
+        val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val vibratorManager = getSystemService(VibratorManager::class.java)
+            vibratorManager?.defaultVibrator
+        } else {
+            @Suppress("DEPRECATION")
+            getSystemService(Vibrator::class.java)
+        }
+
         cueManager = AndroidCueManager(this, vibrator)
         notificationHelper.createChannel()
         observeSessionState()
@@ -49,8 +60,8 @@ class ArukikathaSessionService : Service() {
                 previousResetCount = 0
                 SessionOrchestrator.start()
             }
-            ACTION_PAUSE -> SessionOrchestrator.pause()
-            ACTION_RESUME -> SessionOrchestrator.resume()
+            ACTION_PAUSE -> pauseSessionWithCue()
+            ACTION_RESUME -> resumeSessionWithCue()
             ACTION_STOP -> {
                 previousPhase = null
                 previousResetCount = 0
@@ -65,7 +76,16 @@ class ArukikathaSessionService : Service() {
         observerJob = serviceScope.launch {
             SessionOrchestrator.state.collect { state ->
                 if (shouldUpdateNotification(state)) {
-                    startForeground(SessionNotificationHelper.NOTIFICATION_ID, notificationHelper.build(state))
+                    val notification = notificationHelper.build(state)
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        startForeground(
+                            SessionNotificationHelper.NOTIFICATION_ID,
+                            notification,
+                            ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK
+                        )
+                    } else {
+                        startForeground(SessionNotificationHelper.NOTIFICATION_ID, notification)
+                    }
                 }
 
                 // Manage WakeLock to keep timer running while screen is off
@@ -76,11 +96,17 @@ class ArukikathaSessionService : Service() {
                 }
 
                 val resetTriggered = state.resetsTriggered > previousResetCount
-                if (state.isRunning && (state.phase != previousPhase || resetTriggered)) {
+                val isPhaseChange = state.phase != previousPhase || resetTriggered
+                val shouldPlayCue = isPhaseChange &&
+                    ((!state.isPaused && state.isRunning) || state.phase == ArukikathaPhase.COMPLETED)
+
+                if (shouldPlayCue) {
                     playCueForPhase(state.phase)
                     previousPhase = state.phase
                     previousResetCount = state.resetsTriggered
-                } else if (!state.isRunning) {
+                }
+
+                if (!state.isRunning && state.phase != ArukikathaPhase.COMPLETED) {
                     previousPhase = null
                     previousResetCount = state.resetsTriggered
                 }
@@ -100,13 +126,49 @@ class ArukikathaSessionService : Service() {
 
     private fun playCueForPhase(phase: ArukikathaPhase) {
         when (phase) {
-            ArukikathaPhase.BRISK -> cueManager.playBriskCue()
-            ArukikathaPhase.NORMAL -> cueManager.playNormalCue()
+            ArukikathaPhase.BRISK -> playModeStartCue { cueManager.playBriskCue() }
+            ArukikathaPhase.NORMAL -> playModeStartCue { cueManager.playNormalCue() }
             ArukikathaPhase.PAUSE_TO_NORMAL,
-            ArukikathaPhase.PAUSE_TO_BRISK -> cueManager.playResetCue()
-            ArukikathaPhase.COMPLETED -> cueManager.playCompletionCue()
+            ArukikathaPhase.PAUSE_TO_BRISK -> cueManager.playTransitionCue()
+
+            ArukikathaPhase.COMPLETED -> playCompletionCue()
         }
-        cueManager.vibrateShort()
+    }
+
+    private fun pauseSessionWithCue() {
+        val before = SessionOrchestrator.state.value
+        if (!before.isRunning || before.isPaused || before.phase == ArukikathaPhase.COMPLETED) return
+
+        SessionOrchestrator.pause()
+        cueManager.playPauseCue()
+    }
+
+    private fun resumeSessionWithCue() {
+        val before = SessionOrchestrator.state.value
+        if (!before.isRunning || !before.isPaused || before.phase == ArukikathaPhase.COMPLETED) return
+
+        SessionOrchestrator.resume()
+        val after = SessionOrchestrator.state.value
+        val resetTriggered = after.resetsTriggered > before.resetsTriggered
+
+        previousPhase = after.phase
+        previousResetCount = after.resetsTriggered
+
+        if (resetTriggered) {
+            cueManager.playResetCue()
+        } else {
+            cueManager.playResumeCue()
+        }
+    }
+
+    private fun playModeStartCue(playAudioCue: () -> Unit) {
+        cueManager.vibrateModeStart()
+        playAudioCue()
+    }
+
+    private fun playCompletionCue() {
+        cueManager.vibrateCompletion()
+        cueManager.playCompletionCue()
     }
 
     private fun shouldUpdateNotification(state: ActiveSessionState): Boolean {

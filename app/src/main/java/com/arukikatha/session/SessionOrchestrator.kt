@@ -31,7 +31,7 @@ object SessionOrchestrator {
     fun start() {
         holdTicksUntilRealtimeMs = 0L
         pauseStartRealtimeMs = null
-        engine.start()
+        engine.start(startedAtEpochMillis = System.currentTimeMillis())
         _state.value = engine.state()
         ensureTicker()
     }

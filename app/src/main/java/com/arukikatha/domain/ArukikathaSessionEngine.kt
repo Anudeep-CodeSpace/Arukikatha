@@ -15,7 +15,7 @@ class ArukikathaSessionEngine(
 
     fun state(): ActiveSessionState = state
 
-    fun start() {
+    fun start(startedAtEpochMillis: Long) {
         if (state.phase == ArukikathaPhase.COMPLETED) {
             stop()
         }
@@ -24,7 +24,8 @@ class ArukikathaSessionEngine(
             isPaused = false,
             pauseAgeSec = 0,
             lastResetMessage = null,
-            resetMessageRemainingMs = 0
+            resetMessageRemainingMs = 0,
+            startedAtEpochMillis = startedAtEpochMillis
         )
     }
 
